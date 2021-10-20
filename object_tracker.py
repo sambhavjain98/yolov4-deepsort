@@ -22,6 +22,9 @@ from tensorflow.compat.v1 import InteractiveSession
 from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
+#Custom functions 
+from core.functions import *
+
 from tools import generate_detections as gdet
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
 flags.DEFINE_string('weights', './checkpoints/yolov4-416',
@@ -157,10 +160,10 @@ def main(_argv):
         class_names = utils.read_class_names(cfg.YOLO.CLASSES)
 
         # by default allow all classes in .names file
-        allowed_classes = list(class_names.values())
+        # allowed_classes = list(class_names.values())
         
         # custom allowed classes (uncomment line below to customize tracker for only people)
-        #allowed_classes = ['person']
+        allowed_classes = ['person']
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
         names = []
@@ -199,12 +202,14 @@ def main(_argv):
         # Call the tracker
         tracker.predict()
         tracker.update(detections)
-
-        # update tracks
+        bboxes_t = []
+        to_crop_frame = frame
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue 
             bbox = track.to_tlbr()
+            # print(bbox)
+            bboxes_t.append(bbox)
             class_name = track.get_class()
             
         # draw bbox on screen
@@ -213,7 +218,7 @@ def main(_argv):
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id)))*17, int(bbox[1])), color, -1)
             cv2.putText(frame, class_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
-
+            
         # if enable info flag then print details about each track
             if FLAGS.info:
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
@@ -223,7 +228,26 @@ def main(_argv):
         print("FPS: %.2f" % fps)
         result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        
+        FLAGS_crop = 1
+        # print(bboxes_t)
+        if FLAGS_crop:
+            crop_rate = 50 # capture images every so many frames (ex. crop photos every 150 frames)
+            crop_path = os.path.join(os.getcwd(), 'detections', 'crop', 'outputs/')
+            try:
+                os.mkdir(crop_path)
+            except FileExistsError:
+                pass
+            if frame_num % crop_rate == 0:
+                final_path = crop_path # os.path.join(crop_path, 'frame_' + str(frame_num))
+                try:
+                    os.mkdir(final_path)
+                except FileExistsError:
+                    pass   
+                print("Cropping objects ")       
+                crop_objects(cv2.cvtColor(to_crop_frame, cv2.COLOR_BGR2RGB), pred_bbox, final_path, allowed_classes,bboxes_t)
+            else:
+                pass
+
         if not FLAGS.dont_show:
             cv2.imshow("Output Video", result)
         
