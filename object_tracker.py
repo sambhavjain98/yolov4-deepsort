@@ -2,6 +2,8 @@ import os
 # comment out below line to enable tensorflow logging outputs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import time
+import mp_test
+import test_reid
 import tensorflow as tf
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -13,7 +15,9 @@ from core.yolov4 import filter_boxes
 from tensorflow.python.saved_model import tag_constants
 from core.config import cfg
 from PIL import Image
+from random import randint
 import cv2
+import mp_test_pose
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import ConfigProto
@@ -46,6 +50,14 @@ def main(_argv):
     max_cosine_distance = 0.4
     nn_budget = None
     nms_max_overlap = 1.0
+
+    detected_persons = 0
+    bboxes = []
+    ret_flag =1
+    flag=0
+    prev_value =[]
+    person_id = 0
+    multiTracker = cv2.MultiTracker_create()
     
     # initialize deep sort
     model_filename = 'model_data/mars-small128.pb'
@@ -177,6 +189,10 @@ def main(_argv):
                 names.append(class_name)
         names = np.array(names)
         count = len(names)
+	# DA
+        prev_value.append(count)
+
+        #test_reid.re_id_initiate(frame,count)
         if FLAGS.count:
             cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
             print("Objects being tracked: {}".format(count))
@@ -211,14 +227,48 @@ def main(_argv):
             # print(bbox)
             bboxes_t.append(bbox)
             class_name = track.get_class()
+            #if count == detected_persons:
             
+            '''
+            track_id_buffer.append(track.track_id)
+            if track_id_buffer[-2] != track.track_id:
+                print("*******************************************************new person detected")
+                detected_persons+=detected_persons
+                print("*******************************************************track_id::",detected_persons,type(track.track_id))
+                #track.track_id = count
+            '''     
+         
         # draw bbox on screen
             color = colors[int(track.track_id) % len(colors)]
             color = [i * 255 for i in color]
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id)))*17, int(bbox[1])), color, -1)
             cv2.putText(frame, class_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
-            
+            #Automating ROI selection
+            try:   
+                    #mediapipe check for face features                  
+                    x,y,z= mp_test.mp_value(frame)
+                    width,height,_= frame.shape 
+                    print(frame.shape)
+                    X = x*1920
+                    Y = y*1080 
+                    cv2.circle(frame,(int(X),int(Y)),60,(0,255,0),-1,1)
+                    print("X,Y****************************",count,detected_persons)   
+                    #Tracker trigger only when new person detected
+                    if count > detected_persons:
+                        tracker_bbox = (int(X)-70,int(Y)-70,140,140) 
+                        detected_persons+=detected_persons
+                        #print("tracker_box_deepsort::",tracker_bbox)
+                        ret_flag = test_reid.re_id_initiate(tracker_bbox,frame)
+                    #update tracker for every frame  
+                    if count == prev_value[-2] and ret_flag==1:
+                        test_reid.re_id_update(frame,count)
+                        
+                        
+            except:
+                    print("NO features detected")
+        
+
         # if enable info flag then print details about each track
             if FLAGS.info:
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
@@ -228,7 +278,7 @@ def main(_argv):
         print("FPS: %.2f" % fps)
         result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        FLAGS_crop = 1
+        FLAGS_crop = 0
         # print(bboxes_t)
         if FLAGS_crop:
             crop_rate = 50 # capture images every so many frames (ex. crop photos every 150 frames)
