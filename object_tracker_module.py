@@ -17,7 +17,7 @@ from core.config import cfg
 from PIL import Image
 from random import randint
 import cv2
-import mp_test_pose
+# import mp_test_pose
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import ConfigProto
@@ -30,6 +30,10 @@ from deep_sort.tracker import Tracker
 from core.functions import *
 
 from tools import generate_detections as gdet
+
+from main_track import person_tracking
+
+
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
 flags.DEFINE_string('weights', './checkpoints/yolov4-416',
                     'path to weights file')
@@ -45,7 +49,8 @@ flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 
-def main(_argv):
+def obj_track_yolo(_argv):
+    print("Starting YOLO")
     # Definition of the parameters
     max_cosine_distance = 0.4
     nn_budget = None
@@ -85,6 +90,7 @@ def main(_argv):
         print(output_details)
     # otherwise load standard tensorflow saved model
     else:
+        print(FLAGS.weights)
         saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
         infer = saved_model_loaded.signatures['serving_default']
 
@@ -106,7 +112,11 @@ def main(_argv):
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
     frame_num = 0
-    # while video is running
+    # while video is runing
+    flag_run_once = True
+
+    # Creating main_track object 
+    main_track = person_tracking()
     while True:
         return_value, frame = vid.read()
         if return_value:
@@ -116,7 +126,7 @@ def main(_argv):
             print('Video has ended or failed, try a different video format!')
             break
         frame_num +=1
-        print('Frame #: ', frame_num)
+        # print('Frame #: ', frame_num)
         frame_size = frame.shape[:2]
         image_data = cv2.resize(frame, (input_size, input_size))
         image_data = image_data / 255.
@@ -192,10 +202,14 @@ def main(_argv):
 	    # DA
         prev_value.append(count)
 
+        #### 
+        #SJ : Making a copy of original resized frame 
+        frame_resized_orig_copy = frame.copy()
+
         #test_reid.re_id_initiate(frame,count)
         if FLAGS.count:
             cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
-            print("Objects being tracked: {}".format(count))
+            # print("Objects being tracked: {}".format(count))
         # delete detections that are not in allowed_classes
         bboxes = np.delete(bboxes, deleted_indx, axis=0)
         scores = np.delete(scores, deleted_indx, axis=0)
@@ -215,14 +229,11 @@ def main(_argv):
         indices = preprocessing.non_max_suppression(boxs, classes, nms_max_overlap, scores)
         detections = [detections[i] for i in indices]       
 
-        print("BBOX")
-        print(bboxes)
         # Call the tracker
         tracker.predict()
         tracker.update(detections)
         bboxes_t = []
         to_crop_frame = frame
-        tracked_id_bbox = np.array([])
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue 
@@ -231,47 +242,36 @@ def main(_argv):
             bboxes_t.append(bbox)
             class_name = track.get_class()
             #if count == detected_persons:
-            
-            '''
-            track_id_buffer.append(track.track_id)
-            if track_id_buffer[-2] != track.track_id:
-                print("*******************************************************new person detected")
-                detected_persons+=detected_persons
-                print("*******************************************************track_id::",detected_persons,type(track.track_id))
-                #track.track_id = count
-            '''             
+           
         # draw bbox on screen
-
-            print("ID ")
-            print(track.track_id)
             color = colors[int(track.track_id) % len(colors)]
             color = [i * 255 for i in color]
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id)))*17, int(bbox[1])), color, -1)
             cv2.putText(frame, class_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
             #Automating ROI selection
-            try:   
-                    #mediapipe check for face features                  
-                    x,y,z= mp_test.mp_value(frame)
-                    width,height,_= frame.shape 
-                    print(frame.shape)
-                    X = x*1920
-                    Y = y*1080 
-                    cv2.circle(frame,(int(X),int(Y)),60,(0,255,0),-1,1)
-                    print("X,Y****************************",count,detected_persons)   
-                    #Tracker trigger only when new person detected
-                    if count > detected_persons:
-                        tracker_bbox = (int(X)-70,int(Y)-70,140,140) 
-                        detected_persons+=detected_persons
-                        #print("tracker_box_deepsort::",tracker_bbox)
-                        ret_flag = test_reid.re_id_initiate(tracker_bbox,frame)
-                    #update tracker for every frame  
-                    if count == prev_value[-2] and ret_flag==1:
-                        test_reid.re_id_update(frame,count)
+            # try:   
+            #         #mediapipe check for face features                  
+            #         x,y,z= mp_test.mp_value(frame)
+            #         width,height,_= frame.shape 
+            #         print(frame.shape)
+            #         X = x*1920
+            #         Y = y*1080 
+            #         cv2.circle(frame,(int(X),int(Y)),60,(0,255,0),-1,1)
+            #         print("X,Y****************************",count,detected_persons)   
+            #         #Tracker trigger only when new person detected
+            #         if count > detected_persons:
+            #             tracker_bbox = (int(X)-70,int(Y)-70,140,140) 
+            #             detected_persons+=detected_persons
+            #             #print("tracker_box_deepsort::",tracker_bbox)
+            #             ret_flag = test_reid.re_id_initiate(tracker_bbox,frame)
+            #         #update tracker for every frame  
+            #         if count == prev_value[-2] and ret_flag==1:
+            #             test_reid.re_id_update(frame,count)
                         
                         
-            except:
-                    print("NO features detected")
+            # except:
+            #         # print("NO features detected")
         
 
         # if enable info flag then print details about each track
@@ -300,27 +300,33 @@ def main(_argv):
                     pass   
                 print("Cropping objects ")       
                 crop_objects(cv2.cvtColor(to_crop_frame, cv2.COLOR_BGR2RGB), pred_bbox, final_path, allowed_classes,bboxes_t)
-                
             else:
                 pass
 
-        # OBject tracking logic 
-        print(bboxes,count)
-        # print(bboxes_t)
-        # for track
-        
         if not FLAGS.dont_show:
             cv2.imshow("Output Video", result)
+        
+        # cv2.imshow("Frame origi",cv2.cvtColor(frame_resized_orig_copy,cv2.cv2.COLOR_BGR2RGB))
+        
         
         # if output flag is set, save video file
         if FLAGS.output:
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
-    cv2.destroyAllWindows()
+        # person_tracking(bboxes,count)
+        flag_run_once = False
+    # return "LOOP COMPLETED"
 
+
+
+        frame_resized_orig_colored = cv2.cvtColor(frame_resized_orig_copy,cv2.cv2.COLOR_BGR2RGB)
+        main_track.segment_initiate(frame_resized_orig_colored,bboxes,count)
+    # time.sleep(100)
+    cv2.destroyAllWindows()
+    
 if __name__ == '__main__':
     try:
-        app.run(main)
+        app.run(obj_track_yolo)
     except SystemExit:
         pass
 

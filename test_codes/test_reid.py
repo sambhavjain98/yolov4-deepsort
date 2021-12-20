@@ -4,7 +4,7 @@ import time
 from random import randint
 
 from numpy.lib.function_base import median
-import mp_test_pose
+# import mp_test_pose
 import numpy as np
 from scipy.stats import t
 import matplotlib.pyplot as plt
