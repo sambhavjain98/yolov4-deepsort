@@ -2,6 +2,7 @@ import os
 import cv2
 import mp_test
 import numpy as np
+import short_dist
 from draw_utils import draw_utils
 from random import randint
 # prev_person_count = 0
@@ -17,16 +18,45 @@ class person_tracking():
         self.orig_frame  = None
         self.multiTracker = cv2.MultiTracker_create()
         self.colors=[]
+        self.tracker_bboxes=[]
         self.draw = draw_utils()
         # FLAGS 
         self.multi_tracker_init_flag = False
+        self.flag_yolo =False
+        self.flag_mp = False
+
+    def aura(self,bbox,frame):
+    
+        overlays = []
+        counter = 0
+        final_image = []
+        
+        first_frame = frame.copy()
+        first_frame_v1 = frame.copy()
+        # for i in range(len(bbox)):
+        print("aura---------------------------------------------------------",bbox)
+        cv2.circle(first_frame, bbox,150,(0, 0, 255),-1,1)
+        
+        alpha = 0.5
+        image_new = cv2.addWeighted(first_frame_v1, alpha, first_frame, 1 - alpha, 0)
+        cv2.imshow('aura', image_new)
+        #cv2.waitKey(0)
+        return image_new
+
 
     def segment_initiate(self,frame,bboxes,count):
+        bboxes_temp = []
+        for i in bboxes:
+            # print([int(j) for j in i])
+            bboxes_temp.append([int(j) for j in i])
+        # self.colors.append((randint(64, 255), randint(64, 255), randint(64, 255)))
         # print("Person tracking ")
         # print(bboxes,count)
         # Bboxes updating
         # if bboxes is not None:
-    
+
+        
+        self.tracker_bboxes = []
         bboxes_temp = []
         for i in bboxes:
             # print([int(j) for j in i])
@@ -34,79 +64,103 @@ class person_tracking():
 
         self.prev_bboxes = self.pres_bboxes
         self.pres_bboxes = bboxes_temp
-        
-        print("count"+str(self.prev_bboxes)+"pres count"+ str(self.pres_bboxes))
-        
-        # Count updation 
-        self.prev_person_count = self.pres_person_count
-        self.pres_person_count = count
         # Frame is resized and colored 
         self.orig_frame = frame 
-
-        # Condition 1 - Check if there are any person in room
-        if(self.pres_person_count >= 1):
-            # seg_frame - superimposed white frame with multiple bboxes
-            # sepereate frames - list of segmented bboxes 
-            seg_frame,seperate_frames = self.segment_canvas(self.orig_frame,self.pres_bboxes)
-
-            # Condition 2 - Check if the new person enters the room or not
-            if(self.pres_person_count > self.prev_person_count):
-                # TODO : Looping for multiple entries together 
-                # Adding a person ID 
-                for i in seperate_frames:
-
-                    x_cor,y_cor,z_cor,_ = mp_test.mp_value(i)
-                    if(x_cor is not None and y_cor is not None):
-                        self.colors.append((randint(64, 255), randint(64, 255), randint(64, 255)))
-                        cv2.circle(seg_frame, (int(x_cor),int(y_cor)),40,self.colors[0],1)
-               
-                self.multiTracker.add(( cv2.TrackerCSRT_create()), seg_frame, [100,100,200,200])
-                self.multi_tracker_init_flag = True
-
-
-            elif( self.pres_person_count == self.prev_person_count):
-                for i in seperate_frames:
-                    x_cor,y_cor,z_cor,_ = mp_test.mp_value(i)
-                    if(x_cor is not None and y_cor is not None):
-                        self.colors.append((randint(64, 255), randint(64, 255), randint(64, 255)))
-                        cv2.circle(seg_frame, (int(x_cor),int(y_cor)),40,self.colors[0],1)
-                print()
+        try:
+            #check for first person
+            self.pres_person_count = count
+            if self.pres_person_count>=1:
+                self.flag_yolo = True
+                #segmentation of frames to pass to mediapipe
+                seg_frame,seperated_frame = self.segment_canvas(self.orig_frame,self.pres_bboxes)
                 
-                
-            if( self.multi_tracker_init_flag):
-                success, boxes = self.multiTracker.update(seg_frame)
+                #condition to add bbox to multitracker everytime a new person enters
+                if(self.pres_person_count > self.prev_person_count): 
+                    print("Condition 1:New one entered")
+                    #creating a index number to get latest appended value
+                    N = self.pres_person_count -self.prev_person_count
+                    # print("----------------------------------------------------------------",N)
+                    # print("count_pres_prev",self.pres_person_count,self.prev_person_count)
+                    for i in seperated_frame:
+                   
+                        x_cor,y_cor,z_cor,_ = mp_test.mp_value(i)                 
+                        if (x_cor is not None and y_cor is not None):
+                            #TODO : if x & y of MP is None- Raise exceptions 
+                            self.flag_mp = True      
+                            cv2.circle(i,(x_cor,y_cor),20,self.draw.RED,-1,1)
+                            #creating a bbox with dummy width and height
+                            bbox = [x_cor-70,y_cor-70,140,140]
+                            #TODO : Resizing and offsetting the bboxes
+                            self.tracker_bboxes.append(bbox)
+                            # print("trackerbox_with index*****************************************************************",self.tracker_bboxes[-N:])
+                        elif (x_cor is None and y_cor is None):
+                            #Mediapipe failed 
+                            # print("EXCEPTION MP FAILED")
+                            raise exception_mp_failed
+                    # Adding new tracker instance to the last 'N' new tracked BBoxes        
+                    for j in self.tracker_bboxes[-N:]:
+                        #self.aura((x_cor,y_cor),frame)
+                        print("j-Add--------------------------------------------",j, N)
+                        self.multiTracker.add(( cv2.TrackerCSRT_create()), i, j)
 
-                for i, newbox in enumerate(boxes):
-                    # print("**********************************Updating")
-                    p1 = (int(newbox[0]), int(newbox[1]))
-                    p2 = (int(newbox[0] + newbox[2]), int(newbox[1] + newbox[3]))
-                    cv2.rectangle(seg_frame, p1, p2, self.draw.color_list[i], -1, 1)
-                    cv2.putText(seg_frame, "Tag:" + str(i),(int(newbox[0]), int(newbox[1]-10)),0, 0.75, (255,255,255),2)
+                    # Updating the remaining tracker instances 
+                    # for j in self.tracker_bboxes[:(len(self.tracker_bboxes)-N)]:
+                    #     #self.aura((x_cor,y_cor),frame)
+                    #     print("j-Update-------------------------------------------",j, N)
+                    # success, boxes = self.multiTracker.update(seg_frame)
+
+                    # Count updation 
+                    self.prev_person_count = self.pres_person_count
+                    cv2.imshow("Tracker_init",i)
+                #condition to update tracker all the time
+                if self.pres_person_count == self.prev_person_count:
+                        print("Condition 2: Tracking existing")
+                        
+                        for i in seperated_frame:
+                            x_cor,y_cor,z_cor,_ = mp_test.mp_value(i)                 
+                            if (x_cor is not None and y_cor is not None):
+                                #TODO : if x & y of MP is None- Raise exceptions 
+                                self.flag_mp = True      
+                                cv2.circle(i,(x_cor,y_cor),20,self.colors[0],-1,1)
+                                #creating a bbox with dummy width and height
+                                bbox = [x_cor,y_cor,140,140]
+                                #TODO : Resizing and offsetting the bboxes
+                                self.tracker_bboxes.append(bbox)
+                                # print("trackerbox_with index*****************************************************************",self.tracker_bboxes[-N:])
+                            elif (x_cor is None and y_cor is None):
+                                #Mediapipe failed 
+                                # print("EXCEPTION MP FAILED")
+                                raise exception_mp_failed
 
 
-            # for bbox in mp_bboxes:
-            #         self.multiTracker.add(( cv2.TrackerCSRT_create()), frame, bbox)
+                        success, boxes = self.multiTracker.update(seg_frame)
 
-        # Post segmentation
-        # self.update_mp_coord()
-            cv2.imshow("Segmented frame",seg_frame)
-    # def update_mp_coord(self):
-    # def update(self,frame):
-    #     #Tracker update for every frame with latest mp initalised bbox value
-    #     success, boxes = self.multiTracker.update(frame)
-    #     for i, newbox in enumerate(boxes):
-    #               print("**********************************Updating")
-    #               p1 = (int(newbox[0]), int(newbox[1]))
-    #               p2 = (int(newbox[0] + newbox[2]), int(newbox[1] + newbox[3]))
-    #               cv2.rectangle(frame, p1, p2, self.colors[i], -1, 1)
-    #               cv2.putText(frame, "Tag:" + i,(int(newbox[0]), int(newbox[1]-10)),0, 0.75, (255,255,255),2)
+                        for i, newbox in enumerate(boxes):
+                            
+                            p1 = (int(newbox[0]), int(newbox[1]))
+                            
+                            cv2.circle(seg_frame,p1,40,(0,0,255),-1,1)
+                            cv2.putText(seg_frame, "Tag:" + str(i),(int(newbox[0]), int(newbox[1]-10)),0, 0.75, (255,255,255),2)
+                            
+                        cv2.imshow("Tracker_update",seg_frame)
+                        
 
-    # def mp_calculations(self,x,y,z,frame):
-    #     frame_width,frame_height = frame.shape()
-    #     X = x*frame_width
-    #     Y = y*frame_height
-        
-    #     return mp_bboxes
+                        # closet_point = short_dist.closest_point(point1,point2)
+                        # radius = p1_r,p2_r
+                        # print("close",closet_point)
+                        # v1,v2,v3 = closet_point
+                        # #print("v3,radius",v3,radius)
+                        # if v3 <radius :
+                        #     flag_collision = True
+                        #     cv2.putText(frame_copy,"collision True",(100,100),cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
+                                            
+        # except:
+        #     print("yolo_status::"+str(self.flag_yolo)+", mp_status::"+str(self.flag_mp))
+        except exception_mp_failed:
+            if self.pres_person_count>=1:
+                self.multiTracker.update(seg_frame)    
+                "Updating Multitracker"
+            print("MP Failed")
 
     def segment_canvas(self,frame,pres_bboxes):
         # print("segmenting canvas")
@@ -115,6 +169,7 @@ class person_tracking():
         seperate_canvas = np.ones((h,w,3), np.uint8)*255 #initializing white background of same resolution
         canvas = np.ones((h,w,3), np.uint8)*255 #initializing white background of same resolution
         segregated_frames = []
+        #for j in range(len(pres_bboxes)):
         for i in pres_bboxes: 
             seperate_canvas = np.ones((h,w,3), np.uint8)*255 #initializing white background of same resolution
             
@@ -124,24 +179,36 @@ class person_tracking():
             seperate_canvas[i[1]:i[1]+i[3],i[0]:i[0]+i[2]] = cropped
             # The segmented images of boundary are overlayed
             canvas[i[1]:i[1]+i[3],i[0]:i[0]+i[2]] = cropped
-
             segregated_frames.append(seperate_canvas)
 
-        cv2.imshow("Segmented frame", canvas)
+
+        #cv2.imshow("canvas", segregated_frames)
+        
+       
         return canvas,segregated_frames
 
+# define Python user-defined exceptions
+class Error(Exception):
+    """Base class for other exceptions"""
+    pass
+
+class exception_mp_failed(Error):
+    pass
+
+class exception_yolo_failed(Error):
+    pass
 
 
-        
-
-        
-# Person Class
-class person_id():
-    def __init__(self):
-        self.id = 0 
-        self.frame_cropped = None 
-        self.tracker_obj = None
-
-    def update(self,id,frame_cropped,tracker_obj):
-        self.id = id 
-
+# Every track id created will have a object of person associated with it 
+class person():
+    def __init__(self,id, color,track_bbox = None, yolo_bbox= None, isolated_frame = None):
+        self.id = id
+        self.color = color
+        # TODO Present and Past bboxes to be stored 
+        self.sep_frame = isolated_frame 
+        self.track_bbox = track_bbox
+        self.yolo_bbox = yolo_bbox
+    
+    def update(self,track_bbox, yolo_bbox):
+        self.track_bbox = track_bbox
+        self.yolo_bbox = yolo_bbox

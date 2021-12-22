@@ -11,8 +11,10 @@ class draw_utils():
         self.GREEN      = (0,255,0)
         self.RED        = (0,0,255)
         self.YELLOW     = (0, 255, 255)
-        self.color_list = [(0,0,0),(255,255,255),(16,78,139),(255,192,203),(255,0,0)]
-
+        self.color_list = []
+        for i in range(100):
+            self.colors_list.append((randint(64, 255), randint(64, 255), randint(64, 255)))
+        # print("Person tracking ")
     def pointer(self,image,x,y,color = (0,0,255)):
         # x, y = self.pointer
         cv2.circle(image, (x, y), 1, color, -1)
