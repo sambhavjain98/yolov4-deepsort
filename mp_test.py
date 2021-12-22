@@ -39,7 +39,7 @@ def mp_value(image):
             landmark_drawing_spec=mp_drawing_styles
             .get_default_pose_landmarks_style())
         # Flip the image horizontally for a selfie-view display.
-        cv2.imshow('MediaPipe Holistic', cv2.flip(image, 1))
+        #cv2.imshow('MediaPipe Holistic', cv2.flip(image, 1))
         
         
                         
