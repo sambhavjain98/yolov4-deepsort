@@ -1,4 +1,5 @@
 import cv2 
+from random import randint
 class draw_utils():
     def __init__(self):
         self.draw_enabled = False
@@ -12,8 +13,8 @@ class draw_utils():
         self.RED        = (0,0,255)
         self.YELLOW     = (0, 255, 255)
         self.color_list = []
-        for i in range(100):
-            self.colors_list.append((randint(64, 255), randint(64, 255), randint(64, 255)))
+        for i in range(1000):
+            self.color_list.append((randint(64, 255), randint(64, 255), randint(64, 255)))
         # print("Person tracking ")
     def pointer(self,image,x,y,color = (0,0,255)):
         # x, y = self.pointer

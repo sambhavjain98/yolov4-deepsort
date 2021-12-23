@@ -24,10 +24,14 @@ class person_tracking():
         self.tracking_radius = 50
         # Counters 
         self.counter_master = 0
+        
         # FLAGS 
         self.multi_tracker_init_flag = False
         self.flag_yolo =False
         self.flag_mp = False
+        #Tag variables 
+        self.tag_id_index = 0
+        self.tag_dict = {}
 
     def aura(self,bbox,frame):
     
@@ -46,6 +50,16 @@ class person_tracking():
         cv2.imshow('aura', image_new)
         #cv2.waitKey(0)
         return image_new
+    def collision_detection(self,frame,point1,point2):
+        closet_point = short_dist.closest_point(point1,point2)
+        radius =self.tracking_radius+self.tracking_radius
+        print("close",closet_point)
+        v1,v2,v3 = closet_point
+        #print("v3,radius",v3,radius)
+        if v3 <radius :
+            flag_collision = True
+            cv2.putText(frame,"collision True",(100,100),cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
+                
 
 
     def segment_initiate(self,frame,bboxes,count):
@@ -78,34 +92,49 @@ class person_tracking():
                 #segmentation of frames to pass to mediapipe
                 seg_frame,seperated_frame = self.segment_canvas(self.orig_frame,self.pres_bboxes)
                 tracking_frame = seg_frame.copy()
+                ###########################################################################################
                 #condition to add bbox to multitracker everytime a new person enters
-                if(self.pres_person_count > self.prev_person_count): 
+                if(self.pres_person_count > self.counter_master): 
                     print("Condition 1:New one entered, MC-"+str(self.counter_master)+"Pres-"+str(self.pres_person_count)+"Prev"+str(self.prev_person_count))
                     #creating a index number to get latest appended value
-                    N = self.pres_person_count -self.prev_person_count
+                    N = self.pres_person_count - self.counter_master 
                     # print("----------------------------------------------------------------",N)
                     # print("count_pres_prev",self.pres_person_count,self.prev_person_count)
-                    for i in seperated_frame:
-                   
-                        x_cor,y_cor,z_cor,_ = mp_test.mp_value(i)                 
+                    for frame_index in seperated_frame:
+                        #TODO Try block for each mp value and handle it accordingly in except and finally block 
+                        x_cor,y_cor,z_cor,_ = mp_test.mp_value(frame_index)                 
                         if (x_cor is not None and y_cor is not None):
+                            # MP succesfully detected a person
+                            # TODO : Check who is the new person 
                             self.flag_mp = True      
-                            cv2.circle(seg_frame,(x_cor,y_cor),self.tracking_radius,self.colors[count],-1,1)
+                            # cv2.circle(seg_frame,(x_cor,y_cor),self.tracking_radius,self.colors[self.tag_id_index],-1,1)
                             #creating a bbox with dummy width and height
                             bbox = [x_cor-50,y_cor-50,100,100]
                             #TODO : Resizing and offsetting the bboxes
-                            self.tracker_bboxes.append(bbox)
+                            self.tracker_bboxes.append([bbox,x_cor,y_cor])
                             # print("trackerbox_with index*****************************************************************",self.tracker_bboxes[-N:])
                         elif (x_cor is None and y_cor is None):
                             #Mediapipe failed 
                             # print("EXCEPTION MP FAILED")
+                            #TODO Add try locally and handle it with a finally block and else block 
+                            self.flag_mp = True
                             raise exception_mp_failed
+
+
                     # Adding new tracker instance to the last 'N' new tracked BBoxes        
-                    for j in self.tracker_bboxes[-N:]:
+                    for bbox_index in self.tracker_bboxes[-N:]:
                         #self.aura((x_cor,y_cor),frame)
-                        print("j-Add--------------------------------------------",j, N)
-                        self.multiTracker.add(( cv2.TrackerCSRT_create()), seg_frame, j)
+                        # Bbox_index - [bbox_index,x_cor,y_cor]
+                        print("j-Add--------------------------------------------",bbox_index[0], N)
+                        cv2.circle(seg_frame,(bbox_index[1],bbox_index[2]),self.tracking_radius,self.colors[0],-1,1)
+
+                        self.multiTracker.add(( cv2.TrackerCSRT_create()), seg_frame, bbox_index[0])
+                        #TODO add isolated frame to new object
+                        self.tag_dict[self.tag_id_index]=person(self.tag_id_index,self.draw.color_list[self.tag_id_index],bbox_index[0])
+                        print("Added a new object",self.tag_id_index)
+
                         self.counter_master +=1
+                        self.tag_id_index +=1
                         #TODO Add a person object to the tracked ID 
                         
 
@@ -119,7 +148,8 @@ class person_tracking():
                     self.prev_person_count = self.pres_person_count
                     # cv2.imshow("Tracker_init",seg_frame)
                 #condition to update tracker all the time
-                if self.pres_person_count == self.prev_person_count:
+                ######################################################################################
+                if self.pres_person_count == self.counter_master:
                         print("Condition 2: TE, MC-"+str(self.counter_master)+"Pres-"+str(self.pres_person_count)+"Prev"+str(self.prev_person_count))
                         
                         
@@ -129,13 +159,15 @@ class person_tracking():
                             if (x_cor is not None and y_cor is not None):
                                 #TODO : if x & y of MP is None- Raise exceptions 
                                 self.flag_mp = True      
-                                cv2.circle(seg_frame,(x_cor,y_cor),self.tracking_radius,self.colors[count],-1,1)
+                                cv2.circle(seg_frame,(x_cor,y_cor),self.tracking_radius,self.draw.color_list[0],-1,1)
                                 #creating a bbox with dummy width and height
 
                                 # print("trackerbox_with index*****************************************************************",self.tracker_bboxes[-N:])
                             elif (x_cor is None and y_cor is None):
                                 #Mediapipe failed 
                                 # print("EXCEPTION MP FAILED")
+                                #TODO Add try locally and handle it with a finally block and else block 
+                                self.flag_mp = True
                                 raise exception_mp_failed
 
 
@@ -148,53 +180,101 @@ class person_tracking():
                             
                             cv2.rectangle(tracking_frame,p1,p2,self.colors[i],-1,1)
                             cv2.putText(tracking_frame, "Tag:" + str(i),(int(newbox[0]), int(newbox[1]-10)),0, 0.75, self.draw.RED,2)
-                
-                            
 
-                if self.pres_person_count < self.prev_person_count : 
+
+                            
+                            
+                
+                if self.pres_person_count < self.counter_master : 
                     #YOLO might or might not have failed 
                     print("Condition 3: Missing roi, MC-"+str(self.counter_master)+"Pres-"+str(self.pres_person_count)+"Prev"+str(self.prev_person_count))
+                    # if self.pres_bboxes>1:
+                    try:
+                        if False:  # TODO Add Collision condition check 
+                            self.collision(seg_frame,self.pres_bboxes[-1],self.pres_bboxes[-2])
+                        else:
+                            for i in seperated_frame:
+                                x_cor,y_cor,z_cor,_ = mp_test.mp_value(i,True)
+                                try:                  
+                                    if (x_cor is not None and y_cor is not None):
+                                        #TODO : if x & y of MP is None- Raise exceptions 
+                                        self.flag_mp = True      
+                                        cv2.circle(seg_frame,(x_cor,y_cor),self.tracking_radius,self.colors[0],-1,1)
+                                    
+                                    elif (x_cor is None and y_cor is None):
+                                        #Mediapipe failed 
+                                        print("EXCEPTION MP FAILED") 
+                                        self.flag_mp = True
 
-                    for i in seperated_frame:
-                            x_cor,y_cor,z_cor,_ = mp_test.mp_value(i)                 
-                            if (x_cor is not None and y_cor is not None):
-                                #TODO : if x & y of MP is None- Raise exceptions 
-                                self.flag_mp = True      
-                                cv2.circle(seg_frame,(x_cor,y_cor),20,self.colors[count],-1,1)
-                                #creating a bbox with dummy width and height
+                                        # raise exception_mp_failed
 
-                                # print("trackerbox_with index*****************************************************************",self.tracker_bboxes[-N:])
-                            elif (x_cor is None and y_cor is None):
-                                #Mediapipe failed 
-                                # print("EXCEPTION MP FAILED")                            
-                                raise exception_mp_failed
-                    
-                    subtracted_framed = self.subtract_bbox(self.orig_frame,self.pres_bboxes)                       
-                    raise exception_yolo_failed
+                                except exception_mp_failed:
 
-                cv2.imshow("Seg Frame",seg_frame)
-                cv2.imshow("Tracker Frame",tracking_frame)
+                                    print("HANDLING MP FAILED EXCEPTION")    
+                                    # TODO : Use kalman filter 
+                                # finally: 
+                                #     print("Handled--")
+                        
+                            self.flag_yolo =True            
+                            raise exception_yolo_failed
+                        
+                        # success, boxes = self.multiTracker.update(seg_frame)
+                        # print("bboxes",boxes)
 
-                        # closet_point = short_dist.closest_point(point1,point2)
-                        # radius = p1_r,p2_r
-                        # print("close",closet_point)
-                        # v1,v2,v3 = closet_point
-                        # #print("v3,radius",v3,radius)
-                        # if v3 <radius :
-                        #     flag_collision = True
-                        #     cv2.putText(frame_copy,"collision True",(100,100),cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
+                            # for i, newbox in enumerate(boxes):
+                                
+                            #     p1 = (int(newbox[0]), int(newbox[1]))
+                            #     p2 = (int(newbox[0]+newbox[2]), int(newbox[1]+newbox[3]))
+                                
+                            #     cv2.rectangle(tracking_frame,p1,p2,self.colors[i],-1,1)
+                            #     cv2.putText(tracking_frame, "Tag:" + str(i),(int(newbox[0]), int(newbox[1]-10)),0, 0.75, self.draw.RED,2)
+
+                    except exception_yolo_failed:
+                        print("YOLO Failed, Run mediapipe")
+                        subtracted_framed = self.subtract_bbox(self.orig_frame,self.pres_bboxes)
+                        # TODO : For multiple bboxes missed in yolo 
+                        x_cor,y_cor,z_cor,_ = mp_test.mp_value(subtracted_framed,True)                 
+                        if (x_cor is not None and y_cor is not None):
+                            #TODO : if x & y of MP is None- Raise exceptions 
+                            self.flag_mp = True      
+                            cv2.circle(seg_frame,(x_cor,y_cor),self.tracking_radius,self.colors[0],-1,1)
+                            
+                        elif (x_cor is None and y_cor is None):
+                            #Mediapipe failed 
+                            print("EXCEPTION MP FAILED as well as YOLO failed")                            
+                            # raise exception_mp_failed 
+
+                    success, boxes = self.multiTracker.update(seg_frame)
+
+                    for i, newbox in enumerate(boxes):        
+                        p1 = (int(newbox[0]), int(newbox[1]))
+                        p2 = (int(newbox[0]+newbox[2]), int(newbox[1]+newbox[3]))
+                        
+                        cv2.rectangle(tracking_frame,p1,p2,self.colors[i],-1,1)
+                        cv2.putText(tracking_frame, "Tag:" + str(i),(int(newbox[0]), int(newbox[1]-10)),0, 0.75, self.draw.RED,2) 
+
+
+
+
+                cv2.moveWindow("Seg Frame 3",960,0)
+                cv2.moveWindow("Tracker Frame 4",0,540)
+
+                cv2.imshow("Seg Frame 3",cv2.resize(seg_frame,(960,540)))
+                cv2.imshow("Tracker Frame 4 ",cv2.resize(tracking_frame,(960,540)))
+                print("Logging Yolo-"+str(self.flag_yolo)+"MP-"+str(self.flag_mp))
+
+                        
                                             
         # except:
         #     print("yolo_status::"+str(self.flag_yolo)+", mp_status::"+str(self.flag_mp))
-
-        except exception_yolo_failed:
-            print("YOLO Failed, Run mediapipe")
+ 
         
+
         except exception_mp_failed:
             if self.pres_person_count>=1:
                 self.multiTracker.update(seg_frame)    
                 # "Updating Multitracker"
-            print("MP Failed")
+            print("MP Failed exception handled")
 
 
     def segment_canvas(self,frame,pres_bboxes):
@@ -222,8 +302,14 @@ class person_tracking():
        
         return canvas,segregated_frames
 
-    def subtract_bbox(frame, pres_yolo_bboxes):
+    def subtract_bbox(self,frame, pres_yolo_bboxes):
         print("sub")
+        h, w, _ = frame.shape #video size as height and width
+        for i in pres_yolo_bboxes: 
+            white_box = np.ones((i[3],i[2],3),np.uint8)*255
+            frame[i[1]:i[1]+i[3],i[0]:i[0]+i[2]]= white_box
+        # cv2.imshow("sub_frame",frame)
+        return frame
 
 # define Python user-defined exceptions
 class Error(Exception):

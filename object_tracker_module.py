@@ -43,8 +43,8 @@ flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
 flags.DEFINE_string('video', './data/video/test.mp4', 'path to input video or set to 0 for webcam')
 flags.DEFINE_string('output', None, 'path to output video')
 flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
-flags.DEFINE_float('iou', 0.45, 'iou threshold')
-flags.DEFINE_float('score', 0.50, 'score threshold')
+flags.DEFINE_float('iou', 0.35, 'iou threshold')
+flags.DEFINE_float('score', 0.40, 'score threshold')
 flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
@@ -304,7 +304,9 @@ def obj_track_yolo(_argv):
                 pass
 
         if not FLAGS.dont_show:
-            cv2.imshow("Output Video", result)
+            
+            cv2.imshow("Output Video", cv2.resize(result,(960,540)))
+            cv2.moveWindow("Output Video",0,0)
         
         # cv2.imshow("Frame origi",cv2.cvtColor(frame_resized_orig_copy,cv2.cv2.COLOR_BGR2RGB))
         
