@@ -3,6 +3,7 @@ import cv2
 import mp_test
 import numpy as np
 import short_dist
+from kalmanfilter import KalmanFilter
 from draw_utils import draw_utils
 from random import randint
 # prev_person_count = 0
@@ -18,12 +19,18 @@ class person_tracking():
         self.orig_frame  = None
         self.multiTracker = cv2.MultiTracker_create()
         self.colors=[]
+        self.unique_id=[]
         self.tracker_bboxes=[]
         self.draw = draw_utils()
         # Variables 
         self.tracking_radius = 50
+        self.pres_tag =0
+        self.kf_point = (0,0)
         # Counters 
         self.counter_master = 0
+        #kalmanfilter properties(dt,acceleration_x,acceleration_y,std_acc,x_std_meas,y_std_meas)
+        #self.KF = KalmanFilter(2, 1, 1, 1, 0.1, 0.1)
+        self.KF = KalmanFilter(0.1, 1,1, 1, 1, 1)
         
         # FLAGS 
         self.multi_tracker_init_flag = False
@@ -132,6 +139,7 @@ class person_tracking():
                         #TODO add isolated frame to new object
                         self.tag_dict[self.tag_id_index]=person(self.tag_id_index,self.draw.color_list[self.tag_id_index],bbox_index[0])
                         print("Added a new object",self.tag_id_index)
+                        #cv2.imshow("init_frame",seg_frame)
 
                         self.counter_master +=1
                         self.tag_id_index +=1
@@ -177,14 +185,16 @@ class person_tracking():
                             
                             p1 = (int(newbox[0]), int(newbox[1]))
                             p2 = (int(newbox[0]+newbox[2]), int(newbox[1]+newbox[3]))
+                            self.kf_point=p1
                             
                             cv2.rectangle(tracking_frame,p1,p2,self.colors[i],-1,1)
                             cv2.putText(tracking_frame, "Tag:" + str(i),(int(newbox[0]), int(newbox[1]-10)),0, 0.75, self.draw.RED,2)
-
-
+                            #saving unique identity of tracking person
+                            #self.unique_id.append(self.multiTracker.getObjects())
+                            #print(self.unique_id)
                             
-                            
-                
+                        
+
                 if self.pres_person_count < self.counter_master : 
                     #YOLO might or might not have failed 
                     print("Condition 3: Missing roi, MC-"+str(self.counter_master)+"Pres-"+str(self.pres_person_count)+"Prev"+str(self.prev_person_count))
@@ -241,6 +251,19 @@ class person_tracking():
                             
                         elif (x_cor is None and y_cor is None):
                             #Mediapipe failed 
+                            pre_x,pre_y = self.KF.predict()
+                            pre_x = pre_x.tolist()
+                            print("predicted_kalman-----------------------",pre_x,pre_y)
+                            
+                            # #for i in range(3):
+                            upd_x = self.KF.update(self.kf_point)
+                            upd_x = upd_x.tolist()
+                            try:
+                                cv2.circle(seg_frame,(int(pre_x[0][0]),int(pre_x[0][1])),10,self.draw.YELLOW,-1,1)
+                          
+                                cv2.circle(seg_frame,(int(upd_x[0][0]),int(upd_x[0][1])),10,self.draw.RED,-1,1)
+                            except:
+                                print("kalman not predicting")
                             print("EXCEPTION MP FAILED as well as YOLO failed")                            
                             # raise exception_mp_failed 
 

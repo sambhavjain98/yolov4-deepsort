@@ -8,7 +8,7 @@ mp_holistic = mp.solutions.holistic
 mp_pose = mp.solutions.pose
 # For static images:
 # For webcam input:
-def mp_value(image):
+def mp_value(image, display = False):
     face_x =[]
     face_y =[]  
     face_z=[]
@@ -39,7 +39,9 @@ def mp_value(image):
             landmark_drawing_spec=mp_drawing_styles
             .get_default_pose_landmarks_style())
         # Flip the image horizontally for a selfie-view display.
-        #cv2.imshow('MediaPipe Holistic', cv2.flip(image, 1))
+        if(display):
+            cv2.imshow('MediaPipe Holistic', cv2.resize(image,(960,540)))
+            cv2.moveWindow('MediaPipe Holistic',960,540)
         
         
                         
@@ -72,6 +74,6 @@ def mp_value(image):
         #     pass
         
             return x_face,y_face,z_face,image
-        print("Nothing detected")
+        print("MEDIAPIPE --Nothing detected")
         return None,None,None,image
      
