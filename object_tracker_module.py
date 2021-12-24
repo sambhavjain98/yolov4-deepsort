@@ -314,7 +314,16 @@ def obj_track_yolo(_argv):
         # if output flag is set, save video file
         if FLAGS.output:
             out.write(result)
-        if cv2.waitKey(1) & 0xFF == ord('q'): break
+            
+        if cv2.waitKey(1) & 0xFF == ord('a'): 
+            pause_flag = True 
+            print("Program paused")
+            while pause_flag: 
+                if cv2.waitKey(1) & 0xFF == ord('z'): 
+                    break
+        elif cv2.waitKey(1) & 0xFF == ord('q'): break
+       
+        
         # person_tracking(bboxes,count)
         flag_run_once = False
     # return "LOOP COMPLETED"

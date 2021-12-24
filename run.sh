@@ -15,7 +15,7 @@ then
 elif [ "$VAR" = "run" ] 
 then
     echo "Running Yolov4 on camera"
-    python object_tracker_module.py --video $VIDEO_SRC --output ./outputs/webcam.avi --model yolov4
+    python object_tracker.py --video $VIDEO_SRC --output ./outputs/webcam.avi --model yolov4
 elif [ "$VAR" = "run_tiny" ]
 then
     echo "Running Yolov4 Tiny on camera"
